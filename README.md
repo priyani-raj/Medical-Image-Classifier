@@ -1,6 +1,6 @@
 # Medical Image Classification System
 **JIIT Noida | AI & ML Lab | 3rd Semester**
-Team: Ishita Arora | Priyani Rajvanshi | Utkarsh Shukla | Samman Singh
+Team: Ishita Arora | Priyani Rajvanshi | Hrishita Raj Singh | Samman Singh
 
 ---
 
@@ -16,11 +16,13 @@ medical_classification/
 ├── models/
 │   ├── chest_model.py   ← Model 1: Pneumonia detection
 │   ├── brain_model.py   ← Model 2: Brain tumor classification
-│   └── fracture_model.py← Model 3: Fracture detection
+|   |── eye_model.py     ← Model 3: Diabetic Retinopathy Detection
+│   └── fracture_model.py← Model 4: Fracture detection
 │
 ├── data/
 │   ├── chest_xray/      ← Kaggle: paultimothymooney/chest-xray-pneumonia
 │   ├── brain_mri/       ← Kaggle: masoudnickparvar/brain-tumor-mri-dataset
+│   ├── retina_scan/     ← Kaggle: sovitrath/diabetic-retinopathy-2015-data-colored-resized
 │   └── fracture/        ← Kaggle: pkdarabi/bone-fracture-detection-...
 │
 └── results/             ← Trained .h5 models saved here

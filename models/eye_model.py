@@ -1,7 +1,6 @@
 """
 Eye / Retinal Model (Model 4)
 ------------------------------
-Owner    : Samman Singh (2401030271)
 Dataset  : Kaggle - Diabetic Retinopathy 2015 (Resized Version)
            kaggle.com/datasets/sovitrath/diabetic-retinopathy-2015-data-colored-resized
 Classes  : 0 - No DR
