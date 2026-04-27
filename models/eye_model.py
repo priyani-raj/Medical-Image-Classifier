@@ -1,176 +1,229 @@
 """
-Eye / Retinal Model (Model 4)
-------------------------------
-Dataset  : Kaggle - Diabetic Retinopathy 2015 (Resized Version)
+Eye / Retinal Model  —  Diabetic Retinopathy Grading
+======================================================
+Dataset  : Kaggle — Diabetic Retinopathy 2015 (Resized / Colored)
            kaggle.com/datasets/sovitrath/diabetic-retinopathy-2015-data-colored-resized
-Classes  : 0 - No DR
-           1 - Mild
-           2 - Moderate
-           3 - Severe
-           4 - Proliferative DR
-Status   : DUMMY (replace with trained model when ready)
 
-Note     : This is a 5-class classification problem.
-           Dataset is imbalanced — class 0 (No DR) has the most images.
-           Use class_weight during training to handle this.
+Classes  : 0 — No DR
+           1 — Mild DR
+           2 — Moderate DR
+           3 — Severe DR
+           4 — Proliferative DR
+
+Model    : EfficientNetB3 (ImageNet pretrained, fine-tuned)
+           Two-phase training:
+             Phase 1 — frozen backbone, train head  (LR = 1e-3)
+             Phase 2 — unfreeze last 30 layers       (LR = 1e-5)
+
+KEY FIX  : Preprocessing is now IDENTICAL in training and inference.
+           Both use EfficientNet's preprocess_input (scales to [-1, 1]).
+           The old code used CLAHE + /255 for inference but preprocess_input
+           during training — this distribution mismatch caused the model to
+           collapse and predict Grade 0 for every image.
+
+Author   : Ishita Arora
 """
 
-import random
+import os
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model, Sequential
+from tensorflow.keras.layers import (
+    Dense, Dropout, GlobalAveragePooling2D, BatchNormalization
+)
+from tensorflow.keras.applications import EfficientNetB3
+from tensorflow.keras.applications.efficientnet import preprocess_input
 
-# ─────────────────────────────────────────────
-# STEP 1: Imports (uncomment when training)
-# ─────────────────────────────────────────────
-# import numpy as np
-# from tensorflow.keras.models import load_model, Sequential
-# from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
-# from tensorflow.keras.preprocessing.image import load_img, img_to_array
-# from tensorflow.keras.applications import EfficientNetB3
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
+IMG_SIZE   = (224, 224)
+MODEL_PATH = "results/eye_model.h5"
 
-
-# ─────────────────────────────────────────────
-# STEP 2: Config
-# ─────────────────────────────────────────────
-IMG_SIZE    = (224, 224)
-MODEL_PATH  = "results/eye_model.h5"
-CLASSES     = [
+CLASSES = [
     "No DR (Grade 0)",
     "Mild DR (Grade 1)",
     "Moderate DR (Grade 2)",
     "Severe DR (Grade 3)",
-    "Proliferative DR (Grade 4)"
+    "Proliferative DR (Grade 4)",
 ]
 
+GRADE_INFO = {
+    0: {
+        "short":  "No DR",
+        "advice": "No signs of diabetic retinopathy detected. Continue routine annual check-ups.",
+    },
+    1: {
+        "short":  "Mild DR",
+        "advice": "Microaneurysms present. Manage blood sugar carefully. Follow up in 12 months.",
+    },
+    2: {
+        "short":  "Moderate DR",
+        "advice": "Moderate vascular changes visible. Ophthalmology referral recommended within 6 months.",
+    },
+    3: {
+        "short":  "Severe DR",
+        "advice": "Significant retinal changes. Urgent ophthalmology referral required.",
+    },
+    4: {
+        "short":  "Proliferative DR",
+        "advice": "Advanced stage — new abnormal blood vessel growth. Immediate treatment needed.",
+    },
+}
 
-# ─────────────────────────────────────────────
-# STEP 3: Model Architecture
-# ─────────────────────────────────────────────
+
+# ─── MODEL DEFINITION ────────────────────────────────────────────────────────
 def build_eye_model():
     """
-    CNN architecture for diabetic retinopathy classification.
-
-    Why EfficientNetB3?
-    - Retinal images are detailed and high-resolution
-    - EfficientNetB3 is better at capturing fine-grained features
-      compared to VGG16 or ResNet (used in chest/fracture models)
-    - Pretrained on ImageNet → good base for medical images
-
-    TODO: Uncomment and run after downloading dataset.
+    EfficientNetB3 backbone + lightweight classification head.
+    BatchNormalization after pooling helps with the heavy class imbalance.
+    Phase 1: backbone frozen, only the head is trained.
     """
+    base = EfficientNetB3(
+        weights     = "imagenet",
+        include_top = False,
+        input_shape = (224, 224, 3),
+    )
+    base.trainable = False  # freeze for Phase 1
 
-    # base = EfficientNetB3(
-    #     weights     = 'imagenet',
-    #     include_top = False,
-    #     input_shape = (224, 224, 3)
-    # )
-    # base.trainable = False   # Freeze base layers first (Phase 1)
-    #
-    # model = Sequential([
-    #     base,
-    #     GlobalAveragePooling2D(),
-    #     Dense(512, activation='relu'),
-    #     Dropout(0.5),
-    #     Dense(256, activation='relu'),
-    #     Dropout(0.3),
-    #     Dense(5, activation='softmax')    # 5 classes (Grade 0 to 4)
-    # ])
-    #
-    # model.compile(
-    #     optimizer = 'adam',
-    #     loss      = 'categorical_crossentropy',
-    #     metrics   = ['accuracy']
-    # )
-    # return model
-    pass
+    model = Sequential([
+        base,
+        GlobalAveragePooling2D(),
+        BatchNormalization(),
+        Dense(256, activation="relu"),
+        Dropout(0.4),
+        Dense(5, activation="softmax"),
+    ])
+
+    model.compile(
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3),
+        loss      = "categorical_crossentropy",
+        metrics   = ["accuracy"],
+    )
+    return model
 
 
-# ─────────────────────────────────────────────
-# STEP 4: Preprocessing
-# ─────────────────────────────────────────────
-def preprocess_image(img_path):
+def unfreeze_for_finetuning(model, unfreeze_last_n=30):
     """
-    Load and preprocess a retinal fundus image.
-
-    Note: Retinal images benefit from CLAHE (contrast enhancement)
-    before feeding into the model — improves feature visibility.
-    TODO: Uncomment when real model is ready.
+    Phase 2: unfreeze the last N EfficientNetB3 layers with a very low LR.
+    Low LR is critical — a large LR would destroy the pretrained features.
     """
+    base = model.layers[0]
+    for layer in base.layers:
+        layer.trainable = False
+    for layer in base.layers[-unfreeze_last_n:]:
+        layer.trainable = True
 
-    # img = load_img(img_path, target_size=IMG_SIZE, color_mode='rgb')
-    # arr = img_to_array(img) / 255.0
-    #
-    # Optional: Apply CLAHE for better contrast
-    # import cv2
-    # img_cv  = cv2.imread(img_path)
-    # img_cv  = cv2.cvtColor(img_cv, cv2.COLOR_BGR2LAB)
-    # l, a, b = cv2.split(img_cv)
-    # clahe   = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    # l       = clahe.apply(l)
-    # img_cv  = cv2.merge((l, a, b))
-    # img_cv  = cv2.cvtColor(img_cv, cv2.COLOR_LAB2BGR)
-    # arr     = img_cv / 255.0
-    #
-    # return np.expand_dims(arr, axis=0)
-    pass
+    model.compile(
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-5),
+        loss      = "categorical_crossentropy",
+        metrics   = ["accuracy"],
+    )
+    return model
 
 
-# ─────────────────────────────────────────────
-# STEP 5: Handle Class Imbalance
-# ─────────────────────────────────────────────
-def get_class_weights():
+# ─── PREPROCESSING ───────────────────────────────────────────────────────────
+def preprocess_image(img_path: str):
     """
-    Diabetic retinopathy dataset is heavily imbalanced.
-    Grade 0 (No DR) dominates — without this, model just predicts 0 for everything.
+    Single preprocessing function used for BOTH training and inference.
 
-    TODO: Compute from your actual dataset distribution.
-    Use sklearn's compute_class_weight for exact values.
+    Uses EfficientNet's built-in preprocess_input which scales pixel values
+    from [0, 255] → [-1, 1].  This is the same function passed as
+    `preprocessing_function` to ImageDataGenerator during training.
+
+    *** Do NOT swap this for CLAHE + manual /255 normalization.
+        That caused a training/inference distribution mismatch which
+        made the model predict Grade 0 for every single image. ***
     """
+    import cv2
 
-    # from sklearn.utils.class_weight import compute_class_weight
-    # weights = compute_class_weight(
-    #     class_weight = 'balanced',
-    #     classes      = np.array([0, 1, 2, 3, 4]),
-    #     y            = train_labels    # your actual label array
-    # )
-    # return dict(enumerate(weights))
+    img_cv = cv2.imread(img_path)
+    if img_cv is None:
+        return None
 
-    # Approximate manual weights based on known dataset distribution
-    return {
-        0: 1.0,    # No DR       — most common, least weight
-        1: 3.5,    # Mild        
-        2: 2.0,    # Moderate    
-        3: 6.0,    # Severe      — rare, high weight
-        4: 5.0     # Proliferative DR — rare, high weight
-    }
+    img_cv  = cv2.resize(img_cv, IMG_SIZE)
+    img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+
+    arr = img_rgb.astype(np.float32)
+    arr = preprocess_input(arr)          # scales to [-1, 1]  (matches training)
+
+    return np.expand_dims(arr, axis=0)  # → (1, 224, 224, 3)
 
 
-# ─────────────────────────────────────────────
-# STEP 6: Prediction
-# ─────────────────────────────────────────────
+# ─── CLASS WEIGHTS ───────────────────────────────────────────────────────────
+def get_class_weights(train_labels=None):
+    """
+    Sqrt-dampened class weights to handle the heavy class imbalance
+    without overwhelming the gradient signal.
+
+    Formula: weight_i = sqrt(max_count / count_i), normalised so min = 1.
+
+    Raw ratios (used in older code) caused the model to collapse onto the
+    most-weighted class.  The sqrt dampens the extremes.
+    """
+    if train_labels is not None and len(train_labels) > 0:
+        counts    = np.bincount(train_labels, minlength=5).astype(float)
+        counts    = np.where(counts == 0, 1, counts)
+        max_count = counts.max()
+        weights   = np.sqrt(max_count / counts)
+        weights   = weights / weights.min()           # normalise: min = 1.0
+        return {i: round(float(w), 2) for i, w in enumerate(weights)}
+
+    # Fallback based on approximate dataset distribution:
+    # No DR ~73% | Mild ~7% | Moderate ~15% | Severe ~2.5% | Prolif ~2%
+    return {0: 1.0, 1: 2.3, 2: 1.6, 3: 3.0, 4: 3.3}
+
+
+# ─── PREDICTION ──────────────────────────────────────────────────────────────
 def predict_eye(img_path: str) -> dict:
     """
-    Predict diabetic retinopathy grade from retinal image.
-    Currently returns DUMMY output — replace with real model inference.
+    Run inference on a single retinal fundus image.
+
+    Returns
+    -------
+    dict with keys:
+        label       — human-readable DR class name
+        grade       — integer 0-4
+        confidence  — top-class probability as a percentage
+        all_probs   — list[5] of probabilities (%) for all grades
+        advice      — clinical guidance note for this grade
+        model_used  — backbone identifier
+        classes     — full list of class names
+        note        — quick legend string
     """
+    if not os.path.exists(MODEL_PATH):
+        return {
+            "label"      : "Model not trained yet",
+            "grade"      : -1,
+            "confidence" : 0.0,
+            "model_used" : "EyeCNN_EfficientNetB3",
+            "classes"    : CLASSES,
+            "error"      : f"Model file not found: {MODEL_PATH}",
+        }
 
-    # --- DUMMY (remove after training) ---
-    label      = random.choice(CLASSES)
-    grade      = CLASSES.index(label)
-    confidence = round(random.uniform(70, 99), 2)
-    # --------------------------------------
+    model = load_model(MODEL_PATH)
+    img   = preprocess_image(img_path)
 
-    # TODO: Real inference (uncomment after training)
-    # model  = load_model(MODEL_PATH)
-    # img    = preprocess_image(img_path)
-    # probs  = model.predict(img)[0]
-    # grade  = int(np.argmax(probs))
-    # label  = CLASSES[grade]
-    # confidence = round(float(probs[grade]) * 100, 2)
+    if img is None:
+        return {
+            "label"      : "Image load failed",
+            "grade"      : -1,
+            "confidence" : 0.0,
+            "model_used" : "EyeCNN_EfficientNetB3",
+            "classes"    : CLASSES,
+            "error"      : f"Could not read image: {img_path}",
+        }
+
+    probs      = model.predict(img, verbose=0)[0]
+    grade      = int(np.argmax(probs))
+    confidence = round(float(probs[grade]) * 100, 2)
+    all_probs  = [round(float(p) * 100, 2) for p in probs]
 
     return {
-        "label"       : label,
-        "grade"       : grade,
-        "confidence"  : confidence,
-        "model_used"  : "EyeCNN_EfficientNetB3 (Dummy)",
-        "classes"     : CLASSES,
-        "note"        : "Grade 0 = Healthy | Grade 4 = Most Severe"
+        "label"      : CLASSES[grade],
+        "grade"      : grade,
+        "confidence" : confidence,
+        "all_probs"  : all_probs,
+        "advice"     : GRADE_INFO[grade]["advice"],
+        "model_used" : "EyeCNN_EfficientNetB3",
+        "classes"    : CLASSES,
+        "note"       : "Grade 0 = Healthy  |  Grade 4 = Most Severe",
     }

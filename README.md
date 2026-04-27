@@ -52,6 +52,7 @@ python train.py --model all         # Train all 3
 | Chest    | kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia |
 | Brain    | kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset |
 | Fracture | kaggle.com/datasets/pkdarabi/bone-fracture-detection-computer-vision-project |
+| Eye      | https://www.kaggle.com/datasets/sovitrath/diabetic-retinopathy-2015-data-colored-resized?select=colored_images |
 
 Place downloaded data inside the `data/` folder matching the structure above.
 
