@@ -1,8 +1,7 @@
 """
 train.py — Master Training Script
 ===================================
-Trains chest, fracture, and eye (Diabetic Retinopathy) models.
-Brain model is excluded — add later.
+Trains chest, fracture, brain and eye (Diabetic Retinopathy) models.
 
 Usage:
     python train.py --model chest
@@ -172,106 +171,8 @@ def train_chest():
     plot_history(h1, h2, "Chest")
 
 
-# ─── FRACTURE DATA PREP ───────────────────────────────────────────────────────
-def prepare_fracture_keras_dirs(
-    src_root   = "data/fracture_data",
-    out_root   = "data/fracture_data_keras",
-    class_names = ("Normal", "Fractured"),
-):
-    """
-    The Kaggle Bone Fracture dataset ships in YOLO format:
-        fracture_data/train/images/<img>   fracture_data/train/labels/<img>.txt
-        fracture_data/valid/images/<img>   fracture_data/valid/labels/<img>.txt
-        fracture_data/test/images/<img>    fracture_data/test/labels/<img>.txt
 
-    Each label file contains one row: "<class_id> cx cy w h"
-        class_id 0 → Normal   (no fracture)
-        class_id 1 → Fractured
-
-    This function reads those label files and copies each image into the
-    Keras-style directory tree that flow_from_directory expects:
-        fracture_data_keras/train/Normal/
-        fracture_data_keras/train/Fractured/
-        fracture_data_keras/test/Normal/
-        fracture_data_keras/test/Fractured/
-
-    The valid/ split is merged into test/ so we have a proper eval set.
-    Already-built output is skipped on subsequent runs.
-    """
-    train_out = os.path.join(out_root, "train")
-    test_out  = os.path.join(out_root, "test")
-
-    if os.path.exists(train_out):
-        print("[Fracture Prep] Keras dirs already exist — skipping.\n")
-        return train_out, test_out
-
-    IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-
-    # splits to process: (yolo_split_name, keras_dest)
-    splits = [
-        ("train", train_out),
-        ("valid", test_out),   # merge valid → test
-        ("test",  test_out),
-    ]
-
-    counters = {name: 0 for name in class_names}
-    missing_label = 0
-
-    for yolo_split, keras_dest in splits:
-        img_dir   = os.path.join(src_root, yolo_split, "images")
-        label_dir = os.path.join(src_root, yolo_split, "labels")
-
-        if not os.path.isdir(img_dir):
-            print(f"  [!] Not found: {img_dir} — skipping split '{yolo_split}'")
-            continue
-
-        for cls in class_names:
-            os.makedirs(os.path.join(keras_dest, cls), exist_ok=True)
-
-        for fname in os.listdir(img_dir):
-            stem, ext = os.path.splitext(fname)
-            if ext.lower() not in IMG_EXTS:
-                continue
-
-            # locate matching label file
-            label_path = os.path.join(label_dir, stem + ".txt")
-            if not os.path.exists(label_path):
-                missing_label += 1
-                continue
-
-            with open(label_path) as f:
-                first_line = f.readline().strip()
-
-            if not first_line:
-                missing_label += 1
-                continue
-
-            class_id = int(first_line.split()[0])
-            if class_id >= len(class_names):
-                continue
-
-            cls_name = class_names[class_id]
-            src_img  = os.path.join(img_dir, fname)
-            dst_img  = os.path.join(keras_dest, cls_name, fname)
-
-            # avoid overwriting if valid + test have same filename
-            if os.path.exists(dst_img):
-                dst_img = os.path.join(keras_dest, cls_name,
-                                       f"{yolo_split}_{fname}")
-
-            shutil.copy2(src_img, dst_img)
-            counters[cls_name] += 1
-
-    print("[Fracture Prep] Done. Images copied per class:")
-    for cls, n in counters.items():
-        print(f"  {cls}: {n}")
-    if missing_label:
-        print(f"  (skipped {missing_label} images with no label file)")
-    print()
-    return train_out, test_out
-
-
-# ─── TRAIN FRACTURE ───────────────────────────────────────────────────────────
+# ─── TRAIN FRACTURE MODEL ─────────────────────
 def train_fracture():
     """
     Dataset: Kaggle Bone Fracture Detection (YOLO layout).

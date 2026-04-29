@@ -1,6 +1,13 @@
 __pycache__
 models/__pycache__
 
+<<<<<<< HEAD
+results
+venv
+test-data
+data
+=======
 data
 tf_env
 results/
+>>>>>>> 269a021036e2d186c018ce475051f0798c7b983b
