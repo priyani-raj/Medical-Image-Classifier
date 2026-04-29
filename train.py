@@ -68,20 +68,10 @@ def train_chest():
 
 # ─── TRAIN BRAIN MODEL ────────────────────────
 def train_brain():
-    print("[Brain] Training started...")
-    # model = build_brain_model()
-    # train_data, test_data = get_generators(
-    #     "data/brain_mri/train",
-    #     "data/brain_mri/test"
-    # )
-    # callbacks = [
-    #     ModelCheckpoint("results/brain_model.h5", save_best_only=True),
-    #     EarlyStopping(patience=5, restore_best_weights=True)
-    # ]
-    # model.fit(train_data, validation_data=test_data, epochs=EPOCHS, callbacks=callbacks)
-    # print("[Brain] Model saved to results/brain_model.h5")
-    print("[Brain] TODO: Uncomment training code above")
-
+    import subprocess
+    print("[Brain] Running full training pipeline...")
+    import sys
+    subprocess.run([sys.executable, "src/train_brain.py", "--quick-train"])
 
 # ─── TRAIN FRACTURE MODEL ─────────────────────
 def train_fracture():
