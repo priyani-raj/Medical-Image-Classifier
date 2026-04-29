@@ -4,88 +4,100 @@ Bone Fracture Model (Model 3)
 Dataset  : Kaggle Bone Fracture Detection
            kaggle.com/datasets/pkdarabi/bone-fracture-detection-computer-vision-project
 Classes  : Normal | Fractured
-Status   : DUMMY (replace with trained model when ready)
+Model    : ResNet50 (pretrained ImageNet, fine-tuned)
 """
 
-import random
+import os
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import load_model, Sequential
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D, BatchNormalization
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
 
-# ─────────────────────────────────────────────
-# STEP 1: Imports (uncomment when training)
-# ─────────────────────────────────────────────
-# import numpy as np
-# from tensorflow.keras.models import load_model, Sequential
-# from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropout
-# from tensorflow.keras.preprocessing.image import load_img, img_to_array
-
-# ─────────────────────────────────────────────
-# STEP 2: Config
-# ─────────────────────────────────────────────
-IMG_SIZE    = (224, 224)
-MODEL_PATH  = "results/fracture_model.h5"
-CLASSES     = ["Normal", "Fractured"]
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
+IMG_SIZE   = (224, 224)
+MODEL_PATH = "results/fracture_model.h5"
+CLASSES    = ["Normal", "Fractured"]
 
 
-# ─────────────────────────────────────────────
-# STEP 3: Model Architecture (fill when training)
-# ─────────────────────────────────────────────
+# ─── MODEL ───────────────────────────────────────────────────────────────────
 def build_fracture_model():
     """
-    CNN architecture for fracture detection.
-    TODO: Train this with the Kaggle fracture dataset.
+    ResNet50-based binary classifier for fracture detection.
+    ResNet50 handles edge/structural features well — good for bone X-rays.
     """
-    # from tensorflow.keras.applications import ResNet50
-    # base = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-    # base.trainable = False
-    # model = Sequential([
-    #     base,
-    #     Flatten(),
-    #     Dense(128, activation='relu'),
-    #     Dropout(0.3),
-    #     Dense(1, activation='sigmoid')   # Binary: Normal vs Fractured
-    # ])
-    # model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-    # return model
-    pass
+    base = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    base.trainable = False
+
+    model = Sequential([
+        base,
+        GlobalAveragePooling2D(),
+        BatchNormalization(),
+        Dense(256, activation='relu'),
+        Dropout(0.4),
+        Dense(1, activation='sigmoid')   # binary output
+    ])
+
+    model.compile(
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3),
+        loss      = 'binary_crossentropy',
+        metrics   = ['accuracy']
+    )
+    return model
 
 
-# ─────────────────────────────────────────────
-# STEP 4: Preprocessing (fill when training)
-# ─────────────────────────────────────────────
+def unfreeze_fracture(model, unfreeze_last_n=10):
+    """Fine-tune last N layers of ResNet50 with a low LR."""
+    base = model.layers[0]
+    for layer in base.layers:
+        layer.trainable = False
+    for layer in base.layers[-unfreeze_last_n:]:
+        layer.trainable = True
+
+    model.compile(
+        optimizer = tf.keras.optimizers.Adam(learning_rate=1e-5),
+        loss      = 'binary_crossentropy',
+        metrics   = ['accuracy']
+    )
+    return model
+
+
+# ─── PREPROCESSING ───────────────────────────────────────────────────────────
 def preprocess_image(img_path):
-    """
-    Load and preprocess a bone X-ray image.
-    TODO: Uncomment when real model is ready.
-    """
-    # img = load_img(img_path, target_size=IMG_SIZE, color_mode='rgb')
-    # arr = img_to_array(img) / 255.0
-    # return np.expand_dims(arr, axis=0)
-    pass
+    """Load and preprocess a bone X-ray image for inference."""
+    import cv2
+    img = cv2.imread(img_path)
+    if img is None:
+        return None
+    img = cv2.resize(img, IMG_SIZE)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    arr = img.astype(np.float32)
+    arr = preprocess_input(arr)           # ResNet50 preprocessing
+    return np.expand_dims(arr, axis=0)
 
 
-# ─────────────────────────────────────────────
-# STEP 5: Prediction
-# ─────────────────────────────────────────────
+# ─── PREDICTION ──────────────────────────────────────────────────────────────
 def predict_fracture(img_path: str) -> dict:
-    """
-    Predict fracture in bone X-ray.
-    Currently returns DUMMY output — replace with real model inference.
-    """
+    """Predict fracture from a bone X-ray image."""
+    if not os.path.exists(MODEL_PATH):
+        return {
+            "label"      : "Model not trained yet",
+            "confidence" : 0,
+            "model_used" : "FractureCNN_ResNet50",
+            "classes"    : CLASSES,
+            "error"      : f"Train first. Expected at: {MODEL_PATH}"
+        }
 
-    # --- DUMMY (remove after training) ---
-    label      = random.choice(CLASSES)
-    confidence = round(random.uniform(70, 99), 2)
-    # --------------------------------------
-
-    # TODO: Real inference (uncomment after training)
-    # model = load_model(MODEL_PATH)
-    # img   = preprocess_image(img_path)
-    # prob  = model.predict(img)[0][0]
-    # label = CLASSES[1] if prob > 0.5 else CLASSES[0]
-    # confidence = round(float(prob if prob > 0.5 else 1 - prob) * 100, 2)
+    model = load_model(MODEL_PATH)
+    img   = preprocess_image(img_path)
+    prob  = float(model.predict(img, verbose=0)[0][0])
+    label = CLASSES[1] if prob > 0.5 else CLASSES[0]
+    confidence = round((prob if prob > 0.5 else 1 - prob) * 100, 2)
 
     return {
         "label"      : label,
         "confidence" : confidence,
-        "model_used" : "FractureCNN (Dummy)",
+        "model_used" : "FractureCNN_ResNet50",
         "classes"    : CLASSES
     }
