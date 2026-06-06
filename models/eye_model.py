@@ -15,12 +15,6 @@ Model    : EfficientNetB3 (ImageNet pretrained, fine-tuned)
              Phase 1 — frozen backbone, train head  (LR = 1e-3)
              Phase 2 — unfreeze last 30 layers       (LR = 1e-5)
 
-KEY FIX  : Preprocessing is now IDENTICAL in training and inference.
-           Both use EfficientNet's preprocess_input (scales to [-1, 1]).
-           The old code used CLAHE + /255 for inference but preprocess_input
-           during training — this distribution mismatch caused the model to
-           collapse and predict Grade 0 for every image.
-
 Author   : Ishita Arora
 """
 
@@ -73,8 +67,6 @@ GRADE_INFO = {
 # ─── MODEL DEFINITION ────────────────────────────────────────────────────────
 def build_eye_model():
     """
-    EfficientNetB3 backbone + lightweight classification head.
-    BatchNormalization after pooling helps with the heavy class imbalance.
     Phase 1: backbone frozen, only the head is trained.
     """
     base = EfficientNetB3(
@@ -104,7 +96,6 @@ def build_eye_model():
 def unfreeze_for_finetuning(model, unfreeze_last_n=30):
     """
     Phase 2: unfreeze the last N EfficientNetB3 layers with a very low LR.
-    Low LR is critical — a large LR would destroy the pretrained features.
     """
     base = model.layers[0]
     for layer in base.layers:
@@ -122,17 +113,6 @@ def unfreeze_for_finetuning(model, unfreeze_last_n=30):
 
 # ─── PREPROCESSING ───────────────────────────────────────────────────────────
 def preprocess_image(img_path: str):
-    """
-    Single preprocessing function used for BOTH training and inference.
-
-    Uses EfficientNet's built-in preprocess_input which scales pixel values
-    from [0, 255] → [-1, 1].  This is the same function passed as
-    `preprocessing_function` to ImageDataGenerator during training.
-
-    *** Do NOT swap this for CLAHE + manual /255 normalization.
-        That caused a training/inference distribution mismatch which
-        made the model predict Grade 0 for every single image. ***
-    """
     import cv2
 
     img_cv = cv2.imread(img_path)
@@ -143,52 +123,29 @@ def preprocess_image(img_path: str):
     img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
 
     arr = img_rgb.astype(np.float32)
-    arr = preprocess_input(arr)          # scales to [-1, 1]  (matches training)
+    arr = preprocess_input(arr)          
 
-    return np.expand_dims(arr, axis=0)  # → (1, 224, 224, 3)
+    return np.expand_dims(arr, axis=0)  
 
 
 # ─── CLASS WEIGHTS ───────────────────────────────────────────────────────────
 def get_class_weights(train_labels=None):
-    """
-    Sqrt-dampened class weights to handle the heavy class imbalance
-    without overwhelming the gradient signal.
 
-    Formula: weight_i = sqrt(max_count / count_i), normalised so min = 1.
-
-    Raw ratios (used in older code) caused the model to collapse onto the
-    most-weighted class.  The sqrt dampens the extremes.
-    """
     if train_labels is not None and len(train_labels) > 0:
         counts    = np.bincount(train_labels, minlength=5).astype(float)
         counts    = np.where(counts == 0, 1, counts)
         max_count = counts.max()
         weights   = np.sqrt(max_count / counts)
-        weights   = weights / weights.min()           # normalise: min = 1.0
+        weights   = weights / weights.min()          
         return {i: round(float(w), 2) for i, w in enumerate(weights)}
 
-    # Fallback based on approximate dataset distribution:
     # No DR ~73% | Mild ~7% | Moderate ~15% | Severe ~2.5% | Prolif ~2%
     return {0: 1.0, 1: 2.3, 2: 1.6, 3: 3.0, 4: 3.3}
 
 
 # ─── PREDICTION ──────────────────────────────────────────────────────────────
 def predict_eye(img_path: str) -> dict:
-    """
-    Run inference on a single retinal fundus image.
 
-    Returns
-    -------
-    dict with keys:
-        label       — human-readable DR class name
-        grade       — integer 0-4
-        confidence  — top-class probability as a percentage
-        all_probs   — list[5] of probabilities (%) for all grades
-        advice      — clinical guidance note for this grade
-        model_used  — backbone identifier
-        classes     — full list of class names
-        note        — quick legend string
-    """
     if not os.path.exists(MODEL_PATH):
         return {
             "label"      : "Model not trained yet",

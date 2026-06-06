@@ -10,7 +10,7 @@ image_type options:  'chest' | 'fracture' | 'eye' | 'brain'
 from models.chest_model    import predict_chest
 from models.fracture_model import predict_fracture
 from models.eye_model      import predict_eye
-from models.brain_model    import predict_brain   # still dummy — train later
+from models.brain_model    import predict_brain   
 
 
 def predict_image(img_path: str, image_type: str) -> dict:

@@ -51,12 +51,10 @@ from models.eye_model      import (
 
 os.makedirs("results", exist_ok=True)
 
-# ─── CONFIG ──────────────────────────────────────────────────────────────────
 IMG_SIZE   = (224, 224)
 BATCH_SIZE = 32
 
 
-# ─── HELPERS ─────────────────────────────────────────────────────────────────
 def plot_history(h1, h2, name):
     """Plot train/val accuracy and loss across both training phases."""
     acc   = h1.history["accuracy"]     + (h2.history["accuracy"]     if h2 else [])
@@ -107,7 +105,6 @@ def standard_callbacks(model_path, monitor="val_accuracy"):
     ]
 
 
-# ─── BINARY GENERATORS (chest / fracture — unchanged) ────────────────────────
 def binary_generators(train_dir, test_dir, preprocess_fn):
     """
     For binary classification models (chest, fracture).
@@ -133,7 +130,6 @@ def binary_generators(train_dir, test_dir, preprocess_fn):
     return train_data, test_data
 
 
-# ─── TRAIN CHEST (unchanged) ─────────────────────────────────────────────────
 def train_chest():
     """
     Dataset expected at:
@@ -172,7 +168,6 @@ def train_chest():
 
 
 
-# ─── TRAIN FRACTURE MODEL ─────────────────────
 def train_fracture():
     """
     Dataset: Kaggle Bone Fracture Detection (YOLO layout).
@@ -208,7 +203,6 @@ def train_fracture():
     plot_history(h1, h2, "Fracture")
 
 
-# ─── TRAIN EYE (DR only) ─────────────────────────────────────────────────────
 def prepare_eye_split(source_dir, output_dir, test_size=0.2, seed=42):
     """
     Splits the flat Kaggle colored_images folder into:
@@ -264,24 +258,7 @@ def prepare_eye_split(source_dir, output_dir, test_size=0.2, seed=42):
 
 
 def train_eye():
-    """
-    Trains the Diabetic Retinopathy grading model (5-class).
 
-    Expected dataset layout (Kaggle download):
-        data/eye_data/colored_images/No_DR/
-        data/eye_data/colored_images/Mild/
-        data/eye_data/colored_images/Moderate/
-        data/eye_data/colored_images/Severe/
-        data/eye_data/colored_images/Proliferate_DR/
-
-    The script auto-splits into train/ and test/ subfolders on first run.
-
-    PREPROCESSING (critical):
-        Uses EfficientNet's preprocess_input as the ImageDataGenerator's
-        preprocessing_function.  This is identical to what eye_model.py
-        uses during inference, so there is NO distribution mismatch.
-    """
-    # ── import AFTER the model module sets things up ──────────────────────
     from tensorflow.keras.applications.efficientnet import preprocess_input
 
     print("\n" + "=" * 55)
@@ -293,10 +270,8 @@ def train_eye():
         output_dir = "data/eye_data",
     )
 
-    # ── Data generators ───────────────────────────────────────────────────
-    # preprocessing_function = preprocess_input  ← same as inference
     train_gen = ImageDataGenerator(
-        preprocessing_function = preprocess_input,   # ← KEY FIX
+        preprocessing_function = preprocess_input,   
         rotation_range         = 20,
         zoom_range             = 0.15,
         horizontal_flip        = True,
@@ -326,7 +301,7 @@ def train_eye():
     class_weights = get_class_weights(train_data.classes)
     print(f"[Eye] Class weights (sqrt-dampened): {class_weights}\n")
 
-    # ── Phase 1: train head only (backbone frozen) ────────────────────────
+    # ── Phase 1: train head only────────────────────────
     print("[Eye] Phase 1 — frozen EfficientNetB3 backbone, training head (LR=1e-3)...")
     model = build_eye_model()
     h1 = model.fit(
@@ -373,7 +348,6 @@ def train_eye():
     plot_history(h1, h2, "Eye")
 
 
-# ─── MAIN ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Medical Image Classifier — Training")
     parser.add_argument(
