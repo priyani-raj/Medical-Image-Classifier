@@ -1,70 +1,219 @@
 # Medical Image Classification System
-**JIIT Noida | AI & ML Lab | 3rd Semester**
+
+**Jaypee Institute of Information Technology (JIIT), Noida**  
+**Artificial Intelligence & Machine Learning Lab | 3rd Semester**
 Team: Ishita Arora | Priyani Rajvanshi | Hrishita Raj Singh | Samman Singh
 
 ---
 
+## Overview
+
+This project is a multi-disease medical image classification system that automatically analyzes medical images and predicts possible abnormalities using deep learning models.
+
+The system currently supports:
+
+1. **Pneumonia Detection** from Chest X-Ray images
+2. **Brain Tumor Classification** from MRI scans
+3. **Diabetic Retinopathy Detection** from Retinal Fundus Images
+4. **Bone Fracture Detection** from X-Ray images
+
+---
+
+## Features
+
+- Multiple disease-specific deep learning models
+- Automatic image routing
+- Modular architecture
+- Independent model training
+- Extendable for additional medical imaging tasks
+- Centralized prediction interface
+
+---
+
 ## Project Structure
-```
+
+```text
 medical_classification/
 │
-├── main.py              ← Entry point (run this)
-├── router.py            ← Routes image to correct model
-├── train.py             ← Training script for all 3 models
+├── main.py                 ← IDE based Entry point (run this)
+├── app.py                  ← Web based Entry point (run this)
+├── router.py               ← Routes image to correct model
+├── train.py                ← Training script for all models
 ├── requirements.txt
 │
 ├── models/
-│   ├── chest_model.py   ← Model 1: Pneumonia detection
-│   ├── brain_model.py   ← Model 2: Brain tumor classification
-|   |── eye_model.py     ← Model 3: Diabetic Retinopathy Detection
-│   └── fracture_model.py← Model 4: Fracture detection
+│   ├── chest_model.py      ← Pneumonia Detection
+│   ├── brain_model.py      ← Brain Tumor Classification
+│   ├── eye_model.py        ← Diabetic Retinopathy Detection
+│   └── fracture_model.py   ← Bone Fracture Detection
 │
 ├── data/
-│   ├── chest_xray/      ← Kaggle: paultimothymooney/chest-xray-pneumonia
-│   ├── brain_mri/       ← Kaggle: masoudnickparvar/brain-tumor-mri-dataset
-│   ├── retina_scan/     ← Kaggle: sovitrath/diabetic-retinopathy-2015-data-colored-resized
-│   └── fracture/        ← Kaggle: pkdarabi/bone-fracture-detection-...
+│   ├── chest_xray/
+│   ├── brain_mri/
+│   ├── retina_scan/
+│   └── fracture/
 │
-└── results/             ← Trained .h5 models saved here
+├── results/
+│   ├── chest_model.h5
+│   ├── brain_model.h5
+│   ├── eye_model.h5
+│   └── fracture_model.h5
+│
+└── README.md
 ```
 
 ---
 
-## How to Run (Right Now - Dummy Mode)
+## Installation
+
+Clone the repository and install dependencies:
+
 ```bash
+git clone https://github.com/er-ishita/Medical-Image-Classifier
+cd medical_classification
+
 pip install -r requirements.txt
+```
+
+---
+
+## Running the Project
+
+### Option 1: Run using Python
+
+```bash
 python main.py
 ```
 
-## How to Train (After downloading datasets)
+### Option 2: Run using Streamlit (Recommended)
+
+Launch the web interface:
+
 ```bash
-python train.py --model chest       # Train chest model only
-python train.py --model brain       # Train brain model only
-python train.py --model fracture    # Train fracture model only
-python train.py --model all         # Train all 3
+streamlit run app.py
+```
+
+After running the command, Streamlit will automatically open the application in your browser (typically at `http://localhost:8501`).
+
+The Streamlit interface allows users to:
+
+- Upload medical images
+- View disease predictions
+- Interact with the system through a user-friendly web dashboard
 ```
 
 ---
 
-## Datasets (Download from Kaggle)
-| Model    | Dataset Link |
-|----------|-------------|
-| Chest    | kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia |
-| Brain    | kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset |
-| Fracture | kaggle.com/datasets/pkdarabi/bone-fracture-detection-computer-vision-project |
-| Eye      | https://www.kaggle.com/datasets/sovitrath/diabetic-retinopathy-2015-data-colored-resized?select=colored_images |
+## Training Models
 
-Place downloaded data inside the `data/` folder matching the structure above.
+After downloading the datasets and placing them in the appropriate folders:
+
+```bash
+python train.py --model chest
+python train.py --model brain
+python train.py --model eye
+python train.py --model fracture
+
+# Train all models
+python train.py --model all
+```
+
+---
+
+## Datasets
+
+All datasets are publicly available on Kaggle.
+
+| Model | Dataset |
+|---------|---------|
+| Pneumonia Detection | https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia |
+| Brain Tumor Classification | https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset |
+| Diabetic Retinopathy Detection | https://www.kaggle.com/datasets/sovitrath/diabetic-retinopathy-2015-data-colored-resized |
+| Bone Fracture Detection | https://www.kaggle.com/datasets/pkdarabi/bone-fracture-detection-computer-vision-project |
+
+### Dataset Setup
+
+Download each dataset and place it inside the `data/` directory:
+
+```text
+data/
+├── chest_xray/
+├── brain_mri/
+├── retina_scan/
+└── fracture/
+```
 
 ---
 
-## Status
-- [x] Project structure
-- [x] Router logic
-- [x] Dummy predictions (working)
-- [ ] Chest model training
-- [ ] Brain model training  
-- [ ] Fracture model training
-- [ ] Evaluation & metrics
+## Model Architecture
+
+The project is designed to support CNN-based image classification models.
+
+Typical pipeline:
+
+```text
+Input Image
+      ↓
+Preprocessing
+      ↓
+CNN Feature Extraction
+      ↓
+Classification Layer
+      ↓
+Prediction
+```
+The models used are as follow: 
+- ResNet50          (chest and brain model)
+- EfficientNet-B3   (eye model)
+- VGG 16            (chest model)
+
+for performance comparison and explainability studies.
 
 ---
+
+## Evaluation Metrics
+
+The following metrics will be used to evaluate each model:
+
+- Accuracy
+- Precision
+- Recall
+- F1-Score
+- Confusion Matrix
+- ROC-AUC Score
+
+These medical diagnosis prioritize **Recall (Sensitivity)** to minimize false negatives.
+
+---
+
+## Results
+
+Trained models and experiment outputs are available here:
+(You can directly download and store them in "results" folder to run the program.)
+
+**Google Drive:**  
+https://drive.google.com/drive/folders/1f-rwblM5ah9HvrWEVEBP2bp63d0F0o7u?usp=sharing
+
+---
+
+## Future Work
+
+- Explainable AI using Grad-CAM
+- Multi-class disease detection
+- Vision Transformer implementation
+- Deployment on cloud platforms
+- Real-time inference system
+
+---
+
+## Disclaimer
+
+This project is intended for **academic and research purposes only**.
+
+The predictions generated by this system are not a substitute for professional medical diagnosis, treatment, or clinical decision-making.
+
+---
+
+## License
+
+This project was developed as part of the AI & ML Laboratory coursework at JIIT Noida.

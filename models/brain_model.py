@@ -32,12 +32,12 @@ from tensorflow.keras.optimizers import Adam
 
 class BrainModelConfig:
     """Configuration for brain tumor model"""
-    IMG_SIZE = (224, 224)
+    IMG_SIZE = (128, 128)
     IMG_CHANNELS = 3
-    MODEL_PATH = "models/brain_model.h5"
-    CLASSES = ["No Tumor", "Glioma", "Meningioma", "Pituitary"]
+    MODEL_PATH = "results/brain_model.h5"
+    CLASSES = ["Glioma", "Meningioma", "No Tumor", "Pituitary"]
     NUM_CLASSES = 4
-    WEIGHTS_PATH = "models/brain_weights.h5"
+    WEIGHTS_PATH = "results/brain_weights.h5"
     
     # Training config
     BATCH_SIZE = 32
@@ -289,8 +289,21 @@ def predict_brain(img_path: str, model_path=None) -> Dict:
         }
     
     try:
-        # Load model and preprocess image
-        model = load_model(config.MODEL_PATH)
+        # ── Version-safe model loading ─────────────────────────────────────────
+        # Newer TF adds 'groups' to DepthwiseConv2D; older TF raises
+        # "Unrecognized keyword argument" when deserializing such a model.
+        # Register a patched subclass that silently drops the unknown kwarg.
+        from tensorflow.keras.layers import DepthwiseConv2D as _DWConv
+
+        class _CompatDepthwiseConv2D(_DWConv):
+            def __init__(self, *args, **kwargs):
+                kwargs.pop("groups", None)
+                super().__init__(*args, **kwargs)
+
+        model = load_model(
+            config.MODEL_PATH,
+            custom_objects={"DepthwiseConv2D": _CompatDepthwiseConv2D},
+        )
         img_batch = preprocess_image(img_path, config.IMG_SIZE)
         
         if img_batch is None:
@@ -317,7 +330,7 @@ def predict_brain(img_path: str, model_path=None) -> Dict:
             "label": predicted_label,
             "confidence": round(confidence * 100, 2),
             "probabilities": prob_dict,
-            "model_used": "BrainMRI_ResNet50",
+            "model_used": "MobileNetV2 · Brain MRI",
             "classes": config.CLASSES,
             "success": True
         }
@@ -352,7 +365,17 @@ def predict_batch(image_paths: List[str], model_path=None) -> List[Dict]:
         return None
     
     try:
-        model = load_model(config.MODEL_PATH)
+        from tensorflow.keras.layers import DepthwiseConv2D as _DWConv
+
+        class _CompatDepthwiseConv2D(_DWConv):
+            def __init__(self, *args, **kwargs):
+                kwargs.pop("groups", None)
+                super().__init__(*args, **kwargs)
+
+        model = load_model(
+            config.MODEL_PATH,
+            custom_objects={"DepthwiseConv2D": _CompatDepthwiseConv2D},
+        )
         images = preprocess_batch(image_paths, config.IMG_SIZE)
         
         if images is None:
@@ -418,4 +441,3 @@ if __name__ == "__main__":
     model.model.summary()
     
     print("\n✅ Model ready for training!")
-    print(f"Next step: Run train_brain.py to train the model")
